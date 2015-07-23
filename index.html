@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=gb2312" />
+<title>俄罗斯方块</title>
+<link id="style1" rel="stylesheet" type="text/css" href="Tetris.css" >
+<link id="style2" rel="stylesheet" type="text/css" href="Tetris_Blue.css">
+<script type="text/javascript">
+/***********************************************
+// 俄罗斯方块增强版（JavaScript）
+// 版本：v1.0
+// 作者：黄国辉
+// 日期：15.07.15
+// Email: 1207509097@qq.com
+// 注：可拖拽窗口，可在移动端运行
+************************************************/
+var DEF_WIN_WIDTH = 320;
+var DEF_WIN_HEIGHT = 260;
+var $ = function(o){
+	return document.getElementById(o);
+};
+//声明命名空间
+var Guohui = {};
+//基类
+Guohui.Base = function(){
+	//浏览器
+	this._isIE = document.all ? true : false;
+	
+	//对象索引
+	this._nIndex = 0;
+
+	//大小
+	this._nLeft = 0;
+	this._nTop = 0;
+	this._nWidth = DEF_WIN_WIDTH;
+	this._nHeight = DEF_WIN_HEIGHT;
+	
+	//对象ID前缀
+	this._sPrefix = "GH_";
+	
+	//文档对象
+	this.DOM = document;
+	
+	//父对象
+	this._parent = document.body;
+	
+	//创建Div
+	this._createDiv = function(sDivID){
+		var obj = this.DOM.createElement("div");
+		obj.setAttribute("id", this._sPrefix + sDivID + this._nIndex);
+		obj.className = this._sPrefix + sDivID;
+		return obj;
+	};
+	this._$ = function(o){
+		return document.getElementById(o);
+	};
+	//获取元素绝对位置
+	this._getOffset = function(obj){
+		var x = 0, y = 0;
+		do{
+			x += obj.offsetLeft;
+			y += obj.offsetTop;
+			
+			obj = obj.offsetParent;
+		}while(obj);
+		return {x:x, y:y};
+	};
+};
+//窗口类
+Guohui.Window = function(){
+	Guohui.Base.apply(this, arguments);
+	
+	this._nIndex = this._getIndex();
+	
+	//移动相关
+	this._bMouseDown = false;
+	this._nEventX = 0;
+	this._nEventY = 0;
+	
+	//ModlessDialog
+	this._nAddzIndex = 0;
+
+	//对象
+	this.Window = null;
+	this._Title = null;
+	this._Body = null;
+	this._CloseButton = null;
+	this._Container = null;
+	this._OverLayer = null;
+	
+	this._init();
+}
+Guohui.Window.prototype = {
+	//Private method
+	_initObject : function(){
+		this.Window = this._createDiv("Window");
+		this._Container = this._createDiv("Container");
+		this._Title = this._createDiv("Title");
+		this._CloseButton = this._createDiv("CloseButton");
+		this._Body = this._createDiv("Body");
+		//设置窗体元素
+		this.Window.appendChild(this._Container);
+		this._Container.appendChild(this._Title);
+		this._Container.appendChild(this._Body);
+		this._Container.appendChild(this._CloseButton);
+		
+		this._CloseButton.innerHTML = "<span>X</span>";
+	},
+	_initPosition : function(){
+		var left, top, titleHeight;
+		titleHeight = 30;
+		
+		this.Window.style.cssText = "position: relative; left:" + this._nLeft + "px; top:" + this._nTop + "px; width:" + this._nWidth + "px; height:" + this._nHeight + "px; z-index:90;";
+		
+		this._Title.style.cssText = "position: absolute; width:100%; height:" + titleHeight + "px; line-height:" + titleHeight + "px; cursor:move; z-index:11; font-size:12px;";
+		
+		var t = (titleHeight - 19) / 2 ;
+		this._CloseButton.style.cssText = "position: absolute; right:8px; width:20px; height:19px; top:" + t + "px; text-align:center; z-index:12; cursor:pointer;";
+				
+		h = this._nHeight - titleHeight - 1 ;
+		this._Body.style.cssText = "position:absolute; left:0px; top:" + titleHeight + "px; width:100%; 	z-index:11; height:" + h + "px;";	
+	},//设置不透明度
+	_setOpacity : function(n){
+		this.Window.style.MozOpacity = n / 100;
+		if(n == 100){
+			this.Window.style.filter = "";
+		}else{
+			this.Window.style.filter = "alpha(opacity=" + n + ")";	
+		}
+	},
+	_setzIndex : function(str){
+		if(str == "Top"){
+			this.Window.style.zIndex = 100 + this._nAddzIndex;	
+		}else if(str == "OverLayer"){
+			this.Window.style.zIndex = 99 + this._nAddzIndex;
+		}else{
+			this.Window.style.zIndex = 90 + this._nAddzIndex;
+		}
+	},//窗口拖拽
+	_mouseDown : function(oEvent){
+		oEvent = oEvent || window.event;
+		this._setzIndex("Top");
+		this._setOpacity(50);
+		
+		if(this._isIE){
+			this._nEventX = oEvent.clientX + document.documentElement.scrollLeft;
+			this._nEventY = oEvent.clientY + document.documentElement.scrollTop;
+		}else{
+			this._nEventX = oEvent.pageX;
+			this._nEventY = oEvent.pageY;
+		}
+		this._bMouseDown = true;
+		if(this._isIE){
+			this._Title.setCapture();
+		}else{
+			window.captureEvents(Event.MOUSEMOVE | Event.MOUSEUP);
+		}
+	},
+	_mouseMove : function(oEvent){
+		if(this._bMouseDown){
+			var x, y, ex, ey;
+			oEvent = oEvent || window.event;
+			if(this._isIE){//判断拖拽获取鼠标当前值
+				ex = oEvent.clientX + document.documentElement.scrollLeft;
+				ey = oEvent.clientY + document.documentElement.scrollTop;
+			}else{
+				ex = oEvent.pageX;
+				ey = oEvent.pageY;
+			}
+			x = this._nEventX - ex;
+			y = this._nEventY - ey;
+			
+			this.Window.style.left = parseInt(this.Window.style.left) - x + "px";
+			this.Window.style.top = parseInt(this.Window.style.top) - y + "px";
+			
+			this._nEventX = ex;
+			this._nEventY = ey;
+		}			
+	},
+	_mouseUp : function(){
+		this._setzIndex("Normal");
+		this._setOpacity(100);
+		
+		this._bMouseDown = false;
+		if(this._isIE){
+			this._Title.releaseCapture();
+		}else{
+			window.releaseEvents(Event.MOUSEMOVE | Event.MOUSEUP);
+		}
+	},
+	_onclick : function(oEvent){		
+		if(this._nAddzIndex > 0){
+			this.closeDialog();
+		}else{
+			this.closeWindow();
+		}
+	},
+	_initEvent : function(){
+		var objThis = this;
+		this._Title.onmousedown = function(oEvent){
+			objThis._mouseDown(oEvent);
+		};
+		this._Title.onmousemove = function(oEvent){
+			objThis._mouseMove(oEvent);
+		};	
+		this._Title.onmouseup = function(oEvent){
+			objThis._mouseUp(oEvent);
+		};
+		this._CloseButton.onclick = function(oEvent){
+			objThis._onclick(oEvent);
+		};
+	},
+	_init : function(){
+		this._initObject();
+		this._initEvent();
+	},
+	_getIndex : function(){
+		if(this.DOM.nWndCount){
+			return ++this.DOM.nWndCount;
+		}else{
+			this.DOM.nWndCount = 1;
+			return this.DOM.nWndCount;
+		}
+	},
+	_showOverLayer : function(){
+		var o;
+		if(this._OverLayer == null){
+			this._OverLayer = this._createDiv("OverLayer");
+		}
+		o = this._OverLayer;
+		this._parent.appendChild(o);
+		//o.style.backgroundColor = "#FF0000";
+		o.style.width = document.documentElement.clientWidth + "px";
+		o.style.height = document.documentElement.clientHeight + "px";
+		
+	},
+	_hideOverLayer : function(){
+		this._parent.removeChild(this._OverLayer);
+	},
+	//公共方法
+	moveTo : function(x, y){
+		this.Window.style.left = x + "px";
+		this.Window.style.top = y + "px";
+		
+		this._nLeft = x;
+		this._nTop = y;
+	},
+	setSize : function(wid, hei){	
+		this._nWidth = wid;
+		this._nHeight = hei;
+		this.Window.style.width = wid + "px";
+		this.Window.style.height = hei + "px";
+		
+		this._Body.style.height = hei - 30 - 1 + "px";
+	},
+	setDefaultSkin : function(){//两套不同样式，设置默认
+		this._initPosition();
+		//窗口
+		this.Window.style.border = "1px solid #76c2eb";	
+		this._Title.style.backgroundColor = "#d4eeff";
+		this._Title.style.filter = " progid:DXImageTransform.Microsoft.gradient(startcolorstr=#d4eeff,endcolorstr=#fcfdff,gradientType=0);"
+		this._Title.style.color = "#004b85";
+		this._Title.style.fontFamily = "Times New Roman";		
+		this._Body.style.borderTop = "1px solid #76c2eb";
+		this._Body.style.backgroundColor = "#F8F8F8";
+		
+		//this._CloseButton.innerHTML = "<span style='font-size:14px;color:#004b85;font-family:Arial;font-weight:bold;'>X</span>";
+	},
+	setTitle : function(str){
+		this._Title.innerHTML = "&nbsp;&nbsp;" + str;
+	},
+	setBody : function(str){
+		this._Body.innerHTML = str;
+	},
+	setRect : function(left, top){
+		this._nLeft = left;
+		this._nTop = top;
+		if(arguments[2]) this._nWidth = arguments[2];
+		if(arguments[3]) this._nHeight = arguments[3];
+		
+		this.moveTo(left, top);
+		if(arguments.length > 3){
+			this.setSize(this._nWidth, this._nHeight);
+		}
+	},
+	setParent : function(obj){
+		this._parent = obj;
+		
+		//if(this._isShow){
+		//	this._parent.appendChild(this.Window);
+		//}
+	},
+	isShow : function(){ return this._isShow; },
+	appendChild : function(obj){
+		this._Body.appendChild(obj);
+	},
+	showWindow : function(){
+		if(!this._isShow){
+			this._parent.appendChild(this.Window);
+			this._isShow = true;
+		}
+		if(arguments.length > 0){
+			para = arguments[0];
+			if(para.position == "center"){
+				var wid = document.documentElement.clientWidth;
+				var hei = document.documentElement.clientHeight;
+				
+				var x = (wid - this.Window.offsetWidth) / 2;
+				var y = (hei - this.Window.offsetHeight) / 2;
+				//alert(x + "-" + y);
+				this.moveTo(x, y);
+			}
+		}
+	},
+	closeWindow : function(){
+		this._isShow = false;
+		this.Window.innerHTML = "";
+		this._parent.removeChild(this.Window);
+	},
+	hideWindow : function(){
+		this._isShow = false;
+		this._parent.removeChild(this.Window);
+	},
+	showDialog : function(){
+		this._nAddzIndex = 15;
+		var objParent = null;
+		if(arguments.length > 0) objParent = arguments[0];
+		this._showOverLayer();
+		this._setzIndex("Top");
+		this.showWindow();
+		
+		if(objParent != null){ // set position
+			var pt = this._getOffset(objParent);
+			//alert(pt.x + "-" + pt.y + "-" + objParent.offsetHeight + "-" + objParent.offsetWidth);
+			var x = (objParent.offsetWidth - this._nWidth) / 2 + pt.x;  //弹窗在原窗口中间
+			var y = (objParent.offsetHeight - this._nHeight) / 2 + pt.y;
+			this.moveTo(x, y);
+		}
+	},
+	closeDialog : function(){
+		this._nAddzIndex = 15;
+		this._hideOverLayer();
+		this._Body.childNodes[0].style.display = "none";
+		document.body.appendChild(this._Body.childNodes[0]);
+		this.hideWindow();
+	},
+	toString : function(){
+		return this.Window.innerHTML;
+	}
+};
+
+//菜单类
+Guohui.Menu = function(sCallBack){
+	Guohui.Base.apply(this, arguments);
+	//回调函数
+	this._sCallBack = sCallBack;
+	this._nIndex = this._getIndex();
+	//菜单字符数组
+	this._Menu = [];
+	//对象
+	this.Menu = null;
+	this._mainMenu = null;
+	this._subMenu = null;
+	
+	//显示点击菜单
+	this._isShow = false;
+	this._prevMenu = null;
+	
+	this._init();
+};
+
+Guohui.Menu.prototype = {
+	_getIndex : function(){
+		if(this.DOM.nMenuCount){
+			return ++this.DOM.nMenuCount;
+		}else{
+			this.DOM.nMenuCount = 1;
+			return this.DOM.nMenuCount;
+		}
+	},
+	_init : function(){
+		this.Menu = this._createDiv("Menu");
+		this._mainMenu = this._createDiv("MainMenu");
+		this._subMenu = this._createDiv("SubMenu");
+		this._subMenu.style.display = "none";
+		
+		this.Menu.appendChild(this._mainMenu);
+		this.Menu.appendChild(this._subMenu);
+	},
+	_initMenu : function(){
+		var self = this;
+		this._mainMenu.innerHTML = "";
+		this._subMenu.innerHTML = "";
+		
+		for(var i=0; i<this._Menu.length; i++){
+			tmpmenu = this._createDiv("MainMenuItem"+i)
+			tmpmenu.innerHTML = this._Menu[i][0];
+			tmpmenu.nIndex = i;
+			tmpmenu.onmouseover = function(){
+				self._onmouseover(this);
+			}
+			tmpmenu.onmouseout = function(){
+				self._onmouseout(this);
+			}
+			tmpmenu.onclick = function(oEvent){
+				self._onclick(oEvent, this);
+			}
+			this._mainMenu.appendChild(tmpmenu);
+		}
+	},
+	_onmouseover : function(obj){
+		if(this._prevMenu){
+			this._onmouseout(this._prevMenu, true);
+		}
+		if(this._isShow){
+			obj.className = "click";
+			
+			this._showMenu(obj);
+		}else{	
+			obj.className = "hover";
+		}
+	},
+	_onmouseout : function(obj){
+		if((!this._isShow || arguments.length > 1) && obj && obj.style){
+			obj.className = "out";
+		}
+	},
+	_onclick : function(oEvent, obj){
+		this._isShow = true;		
+		
+		oEvent = window.event || oEvent;
+		if(this._isIE){
+			oEvent.cancelBubble = true;
+		}else{
+			oEvent.stopPropagation();
+		}
+		
+		this._onmouseover(obj);
+	},
+	_showMenu: function(obj){
+		this._prevMenu = obj;
+		
+		//show submenu
+		var n = obj.nIndex;
+		var html = [];
+		html.push("<ul>");
+		for(var i=1; i<this._Menu[n].length; i++){
+			if(this._Menu[n][i] != "-"){
+				html.push("<li class='MenuItem'><a hideFocus='hideFocus' href='javascript:" + this._sCallBack + "(" + n + "," + i + ");'>" + this._Menu[n][i] + "</a></li>");
+			}else{
+				html.push("<li class='SepItem'><div class='SepLine'></div></li> ");
+			}
+		}
+		html.push("</ul>");
+		//位置
+		this._subMenu.style.top = obj.offsetHeight + 3 + "px";
+		this._subMenu.style.left = obj.offsetLeft + "px";
+		this._subMenu.style.display = "";
+		this._subMenu.innerHTML = html.join("");
+	},
+	setMenu : function(m){
+		this._Menu = m;
+		this._initMenu();
+	},
+	setHidden : function(){
+		this._isShow = false;
+		this._subMenu.style.display = "none";
+		this._onmouseout(this._prevMenu, true);
+	},
+	hideMenu : function(){
+		this._isShow = false;
+	}
+};
+
+//游戏类
+Guohui.Tetris = function(){
+	Guohui.Base.apply(this, arguments);
+	
+	this._nIndex = this._getIndex();
+	
+	this._map = null;
+	this._nextMap = null;
+	
+	this._nMaxRow = 20;
+	this._nMaxCol = 10;
+	
+	this._nCurRow = 0;
+	this._nCurCol = 4;
+	this._nCurNum = 0;
+	this._nCurShape = 0;
+	
+	this._nNextRow = 1;
+	this._nNextCol = 1;
+	this._nNextNum = 0;
+	this._nNextShape = 0;
+	
+	this._curBoxs = [];
+	this._nextBoxs = [];
+	this._Keys = {};
+	
+	this._gameState = "ready";
+	
+	this._nNum = 7; // 一开始设置为7，可以调整难度，增加为15种形状
+	this._Boxs = [ ["060102","601020"],
+					["606101"],
+					["600601","600110","060110","600610"],
+					["666001","610110"],
+					["606106","600111"],
+					["601011","060116","666010","610601"],
+					["601016","660601","606110","060111"],
+					[""],
+					["60","01"],
+					["6010","0601"],
+					["0610","6006","6001","0110"],
+					["60060110"],
+					["66610601","60611011","06011611","66601610"],
+					["66606110","61060111","60161011","66060116"],
+					["66060111","60611610"] ]
+	
+	this._nLines = 0;
+	this._nScore = 0;
+	this._nSpeed = 0;
+	this._nLevel = 0;
+	
+	this._nInitSpeed = 0;
+	this._nInitLevel = 0;
+	this._nTimerID = 0;
+	
+	this._nDelay = 1000;
+	this._nInterval = 95;
+	
+	this._init();
+};
+Guohui.Tetris.prototype = {
+	_getIndex : function(){
+		if(this.DOM.nTetrisCount){
+			return ++this.DOM.nTetrisCount;
+		}else{
+			this.DOM.nTetrisCount = 1;
+			return this.DOM.nTetrisCount;
+		}
+	},
+	_init : function(){
+		this.Tetris = this._createDiv("Tetris");
+		var html = [];
+		html.push("<div class='GH_Te_Left'>");
+		html.push("	   <div id='GH_GameArea-1' class='GH_GameArea'></div>");
+		html.push("</div>");
+		html.push("<div class='GH_Te_Right'>");
+		html.push("	   <div id='GH_NextBox-1' class='GH_NextBox'></div>");
+		html.push("    <ul class='GH_Prototype'>");
+		html.push("    	   <li>当前行数：</li>");
+		html.push("        <li><input type='text' id='GH_Lines-1' name='GH_Lines-1' value='0' readonly = 'readonly' /></li>");
+		html.push("        <li>当前分数：</li>");
+		html.push("        <li><input type='text' id='GH_Score-1' name='GH_Score-1' value='0' readonly = 'readonly' /></li>");
+		html.push("        <li>当前速度：</li>");
+		html.push("        <li><input type='text' id='GH_Speed-1' name='GH_Speed-1' value='0' readonly = 'readonly' /></li>");
+		html.push("        <li>当前难度：</li>");
+		html.push("        <li><input type='text' id='GH_Level-1' name='GH_Level-1' value='0' readonly = 'readonly' /></li>");
+		html.push("        <li>最高分数：</li>");
+		html.push("        <li><input type='text' id='GH_Level-1' name='GH_Level-1' value='0' readonly = 'readonly' /></li>");
+		html.push("    </ul>");
+		html.push("</div>");
+		html.push("<div class='Menu'>");
+        html.push("	<input type='button' id='start'  value='新局' style='background:#6699FF;color:#6600CC'/>  ");
+        html.push("	<input type='button' id='pause' value='启动/暂停' style='background:#6699FF;color:#6600CC' />  ");
+		html.push("	<input type='button' id='left'  value='向左' style='background:#6699FF;color:#6600CC' />  ");
+		html.push("	<input type='button' id='right'  value='向右' style='background:#6699FF;color:#6600CC' />  ");
+		html.push("	<input type='button' id='speed'  value='加速' style='background:#6699FF;color:#6600CC' />  ");
+		html.push("	<input type='button' id='turn'  value='翻转' style='background:#6699FF;color:#6600CC'/>  ");
+		html.push("</div>");
+		
+		var str = html.join("");
+		str = str.replace(/-1/g, this._nIndex);
+		this.Tetris.innerHTML = str;
+		this._parent.appendChild(this.Tetris);
+		
+		var i = this._nIndex;
+		this._GameArea = this._$("GH_GameArea" + i);
+		this._NextBox = this._$("GH_NextBox" + i);
+		this._Lines = this._$("GH_Lines" + i);
+		this._Score = this._$("GH_Score" + i);
+		this._Speed = this._$("GH_Speed" + i);
+		this._Level = this._$("GH_Level" + i);
+		
+		this._createMap();
+		this._setDefaultKey();
+	},
+	_setDefaultKey : function(){
+		this._Keys = this._getDefaultKey();
+	},
+	_getDefaultKey : function(){
+		return {
+			left: 37,
+			right: 39,
+			down: 40,
+			cshape: 38
+		};
+	},
+	_createMap : function(){//游戏表格
+		var html = [];
+		html.push("<table width='100%' cellpadding='0' onselectstart='return false;' cellspacing='0' id='GH_Table" + this._nIndex + "' >");
+		for(var i=0; i<this._nMaxRow; i++){
+			html.push("<tr>");
+			for(var j=0; j<this._nMaxCol; j++){
+				html.push("<td class='GH_HideBox'>&nbsp;</td>");
+			}
+			html.push("</tr>");
+		}
+		html.push("</table>");
+		this._GameArea.innerHTML = html.join("");
+		this._map = this._$("GH_Table" + this._nIndex);
+		
+		var next = [];
+		next.push("<table width='100%' cellpadding='0' onselectstart='return false;' cellspacing='0' id='GH_Table2" + this._nIndex + "' >");
+		for(var i=0; i<4; i++){
+			next.push("<tr>");
+			for(var j=0; j<4; j++){
+				next.push("<td class='GH_HideBox2'>&nbsp;</td>");
+			}
+			next.push("</tr>");
+		}
+		next.push("</table>");
+		this._NextBox.innerHTML = next.join("");
+		this._nextMap = this._$("GH_Table2" + this._nIndex);
+	},
+	_getRandom : function(nMin, nMax){
+		return parseInt(Math.random()*(nMax-nMin)) + nMin;
+	},
+	_clearTimer : function(){//清除定时器
+		if(this._nTimerID > 0){
+			clearTimeout(this._nTimerID);
+			this._nTimerID = 0;
+		}
+	},
+	_resetData : function(){//新局重置数据	
+		this._clearTimer();
+		
+		this._nLines = 0;
+		this._nScore = 0;
+		this._nSpeed = 0;
+		this._nLevel = 0;
+		
+		this._gameState = "start";
+		
+		for(var i=0; i<this._nMaxRow; i++){ //新的一局每行每列重置
+			for(var j=0; j<this._nMaxCol; j++){
+				this._map.rows[i].cells[j].className = "GH_HideBox";
+				this._map.rows[i].cells[j].isHave = false;
+			}
+		}
+		
+		for(var i=0; i<4; i++){
+			for(var j=0; j<4; j++){
+				this._nextMap.rows[i].cells[j].className = "GH_HideBox2";
+				this._nextMap.rows[i].cells[j].isHave = false;
+			}
+		}
+	},
+	_parseBox : function(row, col, num, shape){
+		var boxs = this._Boxs[num][shape] + "00";
+		var len = boxs.length;
+		var ret = [];
+		
+		for(var i=0; i<len; i+=2){
+			r = parseInt(boxs.charAt(i));
+			c = parseInt(boxs.charAt(i+1));
+			if(r >= 6) r -= 7;
+			if(c >= 6) c -= 7;
+			
+			r += row;
+			c += col;
+			ret.push(r);
+			ret.push(c);
+		}	
+		return ret;
+	},
+	_createBox : function(){  //根据设定的参数生成相应行，列，分值
+		this._nCurRow = 1;
+		this._nCurCol = 4;
+		this._nCurNum = this._nNextNum;
+		this._nCurShape = this._nNextShape;
+		this._curBoxs = this._parseBox(this._nCurRow, this._nCurCol, this._nCurNum, this._nCurShape);
+		
+		var n = this._getRandom(0, this._nNum);
+		var s = this._getRandom(0, 4);
+		if(s >= this._Boxs[n].length){
+			if(this._Boxs[n].length == 1){
+				s = 0;
+			}else{
+				s -= 2;
+			}
+		}	
+		this._nNextNum = n;
+		this._nNextShape = s;
+		this._nextBoxs = this._parseBox(this._nNextRow, this._nNextCol, n, s);
+	},
+	_setBoxStyle : function(obj, row, col, clsname){
+		if(row >= 0 && col >= 0 && row < obj.rows.length && col < obj.rows[row].cells.length){
+			obj.rows[row].cells[col].className = clsname;
+		}
+	},
+	_showBoxs : function(isGameArea, isShow){
+		//class name, obj;
+		var map, clsname, boxs;
+		clsname = "GH_Box"; //show
+		if(isGameArea){
+			map = this._map;
+			if(!isShow) clsname = "GH_HideBox";
+			boxs = this._curBoxs;
+		}else{
+			map = this._nextMap;
+			if(!isShow) clsname = "GH_HideBox2";
+			boxs = this._nextBoxs;
+		}
+		for(var i=0; i<boxs.length; i+=2){
+			this._setBoxStyle(map, boxs[i], boxs[i+1], clsname);
+		}	
+	},
+	_showCurBox : function(){
+		this._showBoxs(true, true);
+	},
+	_showNextBox : function(){
+		this._showBoxs(false, true);
+	},
+	_setInitLevel : function(){
+		var n = 5;
+		for(var i=this._nInitLevel; i>0; i--){
+			r = this._nMaxRow - i;
+			for(var j=0; j<n; j++){ //起初值
+				c = this._getRandom(0, this._nMaxCol);
+				this._map.rows[r].cells[c].isHave = true;
+				this._map.rows[r].cells[c].className = "GH_Box";
+			}
+		}
+	},
+	_start : function(){//开始操作，重置数据，显示方格，显示分数
+		this._resetData();
+		this._createBox();
+		this._createBox();
+		this._showCurBox();
+		this._showNextBox();
+		
+		this._showScore();
+		if(this._nInitLevel > 0){ //只要当前水平不为0，清零
+			this._setInitLevel();
+		}
+		this._moveDown(false);
+	},
+	_pause : function(){
+		if(this._gameState == "start"){ //切换启动与暂停状态
+			this._gameState = "pause";
+		}else if(this._gameState == "pause"){
+			this._gameState = "start";
+		}
+	},
+	_stop : function(){
+		this._clearTimer();
+	},
+	_gameOver : function(){
+		alert("game over!");
+	},
+	_move : function(dir){
+		var rr = 0, cc = 0;
+		var isFound = false;
+		switch(dir.toLowerCase()){
+			case "left":
+				cc = -1;
+				break;
+			case "right":
+				cc = 1;
+				break;
+			case "down":
+				rr = 1;
+				break;
+		}
+		for(var i=0; i<this._curBoxs.length; i+=2){
+			r = this._curBoxs[i] + rr;
+			c = this._curBoxs[i+1] + cc;
+			if(r >= 0){  //移动范围
+				if(r >= this._nMaxRow || c < 0 || c >= this._nMaxCol || this._map.rows[r].cells[c].isHave){
+					isFound = true;
+					break;
+				}
+			}
+		}
+		if(!isFound){
+			this._showBoxs(true, false); //hide;
+			for(var i=0; i<this._curBoxs.length; i+=2){
+				this._curBoxs[i] += rr;
+				this._curBoxs[i+1] += cc;
+			}
+			this._nCurRow += rr;
+			this._nCurCol += cc;
+			this._showBoxs(true, true);
+		}
+		
+		return !isFound;
+	},
+	_setCurBox : function(){
+		for(var i=0; i<this._curBoxs.length; i+=2){
+			r = this._curBoxs[i];
+			c = this._curBoxs[i+1];
+			if(r < 0 || this._map.rows[r].cells[c].isHave == true){
+				this._gameState = "over";
+				return;
+			}
+			this._map.rows[r].cells[c].isHave = true;
+		}
+	},
+	_deleteRow : function(n){
+		for(var i=n; i>0; i--){
+			for(var j=0; j<this._nMaxCol; j++){ //若底层占满，则消掉最下面一层，下移
+				if(this._map.rows[i].cells[j].isHave != this._map.rows[i-1].cells[j].isHave){
+					this._map.rows[i].cells[j].isHave = this._map.rows[i-1].cells[j].isHave;
+					this._map.rows[i].cells[j].className = this._map.rows[i-1].cells[j].className;
+				}
+			}
+		}
+	},
+	_showScore : function(){
+		this._Lines.value = this._nLines;
+		this._Score.value = this._nScore;
+		
+		this._Speed.value = this._nSpeed;
+		if(this._nInitSpeed > 0) this._Speed.value += " + " + this._nInitSpeed;
+		
+		this._Level.value = this._nLevel;
+		if(this._nInitLevel > 0) this._Level.value += " + " + this._nInitLevel;
+	},
+	_checkRow : function(){
+		var rs = [];
+		for(var i=0; i<this._curBoxs.length; i+=2){
+			isFound = false;
+			r = this._curBoxs[i];
+			for(var j=0; j<rs.length; j++){
+				if(rs[j] == r){
+					isFound = true;
+					break;
+				}
+			}
+			if(!isFound){
+				rs.push(r);
+			}
+		}
+		//
+		rs.sort();
+		//document.title = rs;
+		var nCount = 0;
+		for(var i=0; i<rs.length; i++){
+			isFound = true;
+			r = rs[i];
+			for(var c=0; c<this._nMaxCol; c++){			
+				if(this._map.rows[r].cells[c].isHave != true){
+					isFound = false;
+					break;
+				}
+			}
+			if(isFound){
+				nCount ++;
+				this._deleteRow(r);
+			}
+		}
+		if(nCount > 0){        //消掉一层则相应改变当前分数、行数
+			this._nLines += nCount;
+			this._nScore += (Math.pow(2, nCount)-1) * 100;
+			this._nSpeed = parseInt(this._nScore / 10000) ;
+			this._nLevel = parseInt(this._nScore / 10000) ;
+			if(this._nSpeed >= 10) this._nSpeed = 10;
+			if(this._nLevel >= 10) this._nLevel = 10;
+			this._showScore();
+		}
+	},
+	_moveDown : function(isMove){
+		if(this._gameState == "start"){
+			var isMoved = true;
+			this._clearTimer();
+			
+			if(isMove){
+				isMoved = this._move("down");
+			}
+			if(!isMoved){ //不能移动
+				this._setCurBox();
+				if(this._gameState == "over"){
+					this._gameOver();
+					return;
+				}
+				//check row
+				this._checkRow();
+				//new
+				this._showBoxs(false, false); //hide next
+				this._createBox();
+				this._showBoxs(true, true);
+				this._showBoxs(false, true);
+			}
+		}
+		//
+		var self = this;
+		
+		this._nTimerID = setTimeout(function(){self._moveDown(true);}, self._nDelay - (self._nSpeed + self._nInitSpeed) * self._nInterval);
+	},
+	_changeShape : function(){//变换图形
+		var s = this._nCurShape + 1;
+		var n = this._nCurNum;
+		if(s >3 ) s = 0;
+		if(s >= this._Boxs[n].length){
+			if(this._Boxs[n].length == 1){
+				s = 0;
+			}else{
+				s -= 2;
+			}
+		}	
+		var tmp = this._parseBox(this._nCurRow, this._nCurCol, n, s);
+		var isFound = false;
+		for(var i=0; i<tmp.length; i+=2){//依次去数组中的值变换图形
+			r = tmp[i];
+			c = tmp[i+1];
+			if(r >= 0){
+				if(r >= this._nMaxRow || c < 0 || c >= this._nMaxCol || this._map.rows[r].cells[c].isHave){
+					isFound = true;
+					break;
+				}
+			}
+		}
+		if(!isFound){
+			this._showBoxs(true, false); //hide;
+			this._curBoxs = tmp;
+			this._nCurShape = s;
+			this._showBoxs(true, true);
+		}
+		
+		return !isFound;
+	},
+	_quickDown : function(){//加速
+		var add = 0, isFound = false;
+		for(var i=this._nCurRow+1; !isFound && i<=this._nMaxRow; i++){
+			add = i - this._nCurRow;
+			for(var j=0; j<this._curBoxs.length; j+=2){
+				r = add + this._curBoxs[j];
+				c = this._curBoxs[j+1];
+				if(r >= this._nMaxRow || this._map.rows[r].cells[c].isHave){
+					isFound = true;
+					break;
+				}
+			}
+		}
+		add -= 1;
+		if(add > 0){
+			this._showBoxs(true, false);
+			this._nCurRow += add;
+			for(var i=0; i<this._curBoxs.length; i+=2){
+				this._curBoxs[i] += add;
+			}
+			this._showBoxs(true, true);
+			
+			this._moveDown(true);
+		}
+	},
+	onKeyPress : function(keyCode){
+		if(!(this._gameState == "start" || keyCode == 113 || keyCode == 118)) return;
+		
+		switch(keyCode){
+			case 113: //F2
+				this._start();
+				break;
+			case 118: //F7
+				this._pause();
+				break;
+			case this._Keys.left: //37 Left
+				this._move("left");
+				break;
+			case this._Keys.right: //39: //Right
+				this._move("right");
+				break;
+			case this._Keys.cshape: //38: //up
+				this._changeShape();
+				break;
+			case this._Keys.down: //40: //quick down
+				this._quickDown();
+				break;
+		}
+	},
+	onCommand : function(sCommand){
+		switch(sCommand){
+			case "start":
+				this._start();
+				break;
+			case "pause":
+				this._pause();
+				break;
+			case "stop":
+				this._stop();
+				break;
+		}
+	},
+	setMode : function(sMode){
+		if(sMode == "adv"){
+			this._nNum = 15;
+		}else{
+			this._nNum = 7;
+		}
+	},
+	getMode : function(){
+		if(this._nNum == 15){
+			return "adv";
+		}else{
+			return "normal";
+		}
+	},
+	setNum : function(n){
+		if(n < 0 && n >15) n = 1;
+		this._nNum = n;
+	},
+	getNum : function(n){
+		return this._nNum;
+	},
+	setInit : function(nSpeed, nLevel){
+		if(nSpeed < 0 || nSpeed > 10) nSpeed = 0;
+		if(nLevel < 0 || nLevel > 10) nLevel = 0;
+		this._nInitSpeed = nSpeed;
+		this._nInitLevel = nLevel;
+	},
+	getInit : function(){
+		return {speed: this._nInitSpeed, level: this._nInitLevel};
+	},
+	getDefaultKey : function(){
+		return this._getDefaultKey();
+	},
+	getKey : function(){
+		return this._Keys;
+	},
+	setKey : function(left, right, down, changeShape){
+		this._Keys.left = left;
+		this._Keys.right = right;
+		this._Keys.down = down;
+		this._Keys.cshape = changeShape;
+	}
+};
+
+
+//-----------------------------类定义结束--------------------------
+
+var win, dlg, menu, tetris, dlgAbout, dlgOption, dlgKey;
+var win2, menu2, tetris2;
+window.onload = function(){
+	win = new Guohui.Window();
+	win.setTitle("Tetris");
+	win.moveTo(50, 50);
+
+	menu = new Guohui.Menu("doCommand");
+	menu.setMenu([
+		 ["游戏(G)", 
+		  "开始　　　　　　F2",
+		  "暂停　　　　　　F7",
+		  "-",
+		  "退出　　　　　"],
+		 ["选项(E)",
+		  "游戏设置...　　Ctrl+U",
+		  "按键设置...　　Ctrl+K"],
+		 ["颜色(C)",
+		  "绿色",
+		  "蓝色"],
+		 ["帮助(H)",
+		  "关于..."]
+	]);
+
+	win.appendChild(menu.Menu);
+	
+	tetris = new Guohui.Tetris();
+	win.appendChild(tetris.Tetris);
+	
+	win.showWindow({position:"center"});
+	
+	dlgAbout = $("GH_About1");
+	dlgOption = $("GH_Option1");
+	dlgKey = $("GH_Key1");
+	dlg = new Guohui.Window();
+	
+	initDlgEvent();
+	$("style1").disabled = true;
+	$("style2").disabled = false;
+}
+function initDlgEvent(){
+	/* Option */
+	$("btnOOK").onclick = function(){
+		num = $("txtNum").value;
+		ns = parseInt($("txtInitSpeed").value);
+		nl = parseInt($("txtInitLevel").value);
+		if(!/^[1-9][0-5]?$/.test(num)){
+			alert("请输入正确的方块数!");
+			return;
+		}
+		if(isNaN(ns) || isNaN(nl) || ns < 0 || ns > 10 || nl < 0 || nl > 10){
+			alert("请输入数字初始值!");
+			return;
+		}
+		
+		tetris.setNum(num);
+		tetris.setInit(parseInt(ns), parseInt(nl));
+		
+		dlg.closeDialog();
+	};
+	$("btnOCancel").onclick = function(){
+		dlg.closeDialog();
+	};
+
+	/* 设置按钮，新局、启动暂停、向左向右、加速、翻转 */
+    $("start").onclick = function(){
+		tetris._start();
+		//alert("dfs")
+	};
+	$("pause").onclick = function(){
+		tetris._pause();
+	};
+	$("left").onclick = function(){
+		tetris._move("left");
+	};
+	$("right").onclick = function(){
+		tetris._move("right");
+	};
+	$("speed").onclick = function(){
+		tetris._quickDown();
+	};
+	$("turn").onclick = function(){
+		tetris._changeShape();
+	};
+
+	/* 按键值设定 */
+	$("txtKLeft").onkeydown = $("txtKRight").onkeydown = $("txtKDown").onkeydown = $("txtKShape").onkeydown = function(oEvent){
+		oEvent = oEvent || window.event;
+		keyCode = oEvent.keyCode;
+		this.value = getChar(keyCode);
+		this.asc = keyCode;
+		return false;
+	};
+	$("btnKOK").onclick = function(){
+		tetris.setKey($("txtKLeft").asc, $("txtKRight").asc, $("txtKDown").asc, $("txtKShape").asc);
+		dlg.closeDialog();
+	};
+	$("btnKDefault").onclick = function(){ //默认按键值
+		var key = tetris.getDefaultKey();
+		$("txtKLeft").value = getChar(key.left);
+		$("txtKLeft").asc = key.left;
+		$("txtKRight").value = getChar(key.right);
+		$("txtKRight").asc = key.right;
+		$("txtKDown").value = getChar(key.down);
+		$("txtKDown").asc = key.down;
+		$("txtKShape").value = getChar(key.cshape);
+		$("txtKShape").asc = key.cshape;
+	};
+	$("btnKCancel").onclick = function(){
+		dlg.closeDialog();
+	};
+}
+document.onclick = function(){
+	menu.setHidden();
+}
+document.onkeydown = function(oEvent){
+	oEvent = oEvent || window.event;
+	//document.title = oEvent.keyCode + "-alt:" + oEvent.altKey + "-ctrl:" + oEvent.ctrlKey;
+	tetris.onKeyPress(oEvent.keyCode);
+	//tetris2.onKeyPress(oEvent.keyCode);
+	
+	if(oEvent.keyCode == 85 && oEvent.ctrlKey){ //option
+		doCommand(1, 1);
+	}
+	if(oEvent.keyCode == 75 && oEvent.ctrlKey){ // key
+		doCommand(1, 2);
+	}
+}
+function getChar(nCode){ //按键设置默认值
+	var ret = "";
+	switch(nCode){
+		case 37: ret = "←"; break;
+		case 39: ret = "→"; break;
+		case 40: ret = "↓"; break;
+		case 38: ret = "↑"; break;
+		case 32: ret = "Space"; break;
+		default:
+			ret = String.fromCharCode(nCode);
+			break;
+	}
+	
+	
+	return ret;
+}
+
+function doCommand(m, s){
+	m = parseInt(m);
+	s = parseInt(s);
+	switch(m){
+		case 0: //第一个按钮游戏部分，分别启动、暂停、退出
+			switch(s){
+				case 1:
+					tetris.onCommand("start");
+					break;
+				case 2:
+					tetris.onCommand("pause");
+					break;
+				case 4:
+					tetris.onCommand("stop");
+					win.closeWindow();
+					break;
+			}
+			break;
+		case 1: //第二个按钮选项
+			switch(s){
+				case 1:
+					//选项对话框
+					dlgOption.style.display = "block";
+					//初始化
+					$("txtNum").value = tetris.getNum();
+					i = tetris.getInit();
+					$("txtInitSpeed").value = i.speed;
+					$("txtInitLevel").value = i.level;
+					
+					dlg.setTitle("游戏设置");
+					dlg.setSize(300, 210);
+					dlg.appendChild(dlgOption);
+					dlg.showDialog(win.Window);
+					break;
+				case 2:
+					//按键对话框
+					dlgKey.style.display = "block";
+					//初始化
+					var key = tetris.getKey();
+					$("txtKLeft").value = getChar(key.left);
+					$("txtKLeft").asc = key.left;
+					$("txtKRight").value = getChar(key.right);
+					$("txtKRight").asc = key.right;
+					$("txtKDown").value = getChar(key.down);
+					$("txtKDown").asc = key.down;
+					$("txtKShape").value = getChar(key.cshape);
+					$("txtKShape").asc = key.cshape;
+					
+					dlg.setTitle("按键设置");
+					dlg.setSize(300, 200);
+					dlg.appendChild(dlgKey);
+					dlg.showDialog(win.Window);
+					break;
+			}
+			break;
+		case 2: //设置不同皮肤样式
+			switch(s){
+				case 1:
+					$("style1").disabled = false;
+					$("style2").disabled = true;
+					break;
+				case 2:
+					$("style1").disabled = true;
+					$("style2").disabled = false;
+					//alert($("style2").href);
+					break;
+			}
+			break;
+		case 3: //Help
+			switch(s){
+				case 1:
+					//关于对话框
+					dlgAbout.style.display = "block";
+					dlg.setTitle("关于");
+					dlg.setSize(300, 210);
+					dlg.appendChild(dlgAbout);
+					dlg.showDialog(win.Window);
+					break;
+			}
+			break;
+	}
+}
+</script>
+</head>
+
+<body>
+<div id="GH_About1" class="GH_About">
+	<ul id="GH_BigIcon" class="GH_BigIcon">
+    	<li class="GH_BigIcon1">&nbsp;</li>
+        <li class="GH_BigIcon2">&nbsp;</li>
+        <li class="GH_BigIcon3">&nbsp;</li>
+        <li class="GH_BigIcon4">&nbsp;</li>
+    </ul>
+	<ul id="GH_Info1" class="GH_Info">
+    	<li>俄罗斯方块 JavaScript版</li>
+        <li>版本：v1.0</li>
+        <li>作者：黄国辉</li>
+        <li>ＱＱ：1207509097</li>
+        <li>版权所有 Copyright&copy; 2015</li>
+    </ul>
+</div>
+<div id="GH_Option1" class="GH_Option">
+	<ul>
+    	<li>方块数量：　<input type="text" name="txtNum" id="txtNum" size="12" maxlength="2" value="7" class="GH_TextBox"  />(1 - 15)</li>
+        <li>初始速度：　<input type="text" name="txtInitSpeed" id="txtInitSpeed" size="12" maxlength="2" value="0" class="GH_TextBox"  />(0 - 10)</li>
+        <li>初始难度：　<input type="text" name="txtInitLevel" id="txtInitLevel" size="12" maxlength="2" value="0" class="GH_TextBox"  />(0 - 10)</li>
+        <li>&nbsp;</li>
+        <li><a href="javascript:void(0);" id="btnOOK" class="GH_Button">确定</a>  <a href="javascript:void(0);" id="btnOCancel" class="GH_Button">取消</a></li>
+    </ul>
+</div>
+<div id="GH_Key1" class="GH_Key">
+	<ul>
+    	<li>左移：<input name="txtKLeft" type="text" id="txtKLeft" size="8" class="GH_TextBox"  />
+    	</li>
+        <li class="sep">右移：<input name="txtKRight" type="text" id="txtKRight" size="8"  class="GH_TextBox"  />
+        </li>
+        <li>下移：<input name="txtKDown" type="text" id="txtKDown" size="8" class="GH_TextBox"  />
+        </li>
+        <li class="sep">变形：<input name="txtKShape" type="text" id="txtKShape" size="8" class="GH_TextBox" />
+        </li>
+        <li class="btn"><a href="javascript:void(0);" id="btnKOK" class="GH_Button">确定</a> <a href="javascript:void(0);" id="btnKDefault" class="GH_Button">默认值</a> <a href="javascript:void(0);" id="btnKCancel" class="GH_Button">取消</a></li>
+    </ul>
+</div>
+</body>
+</html>
